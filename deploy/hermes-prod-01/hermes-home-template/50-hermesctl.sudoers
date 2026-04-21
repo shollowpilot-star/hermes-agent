@@ -1,0 +1,6 @@
+# Allow opsadmin to exec as hermes *only* via the hermes venv binary.
+# Tight Cmnd_Alias — no shell escape, no env_keep expansion.
+# Install on VPS as: sudo install -m 0440 -o root -g root 50-hermesctl.sudoers /etc/sudoers.d/50-hermesctl
+# Validate with: sudo visudo -cf /etc/sudoers.d/50-hermesctl
+Cmnd_Alias HERMES_EXEC = /usr/bin/env HERMES_HOME=/var/lib/hermes/.hermes PATH=* /opt/hermes/venv/bin/hermes *
+opsadmin ALL=(hermes) NOPASSWD: HERMES_EXEC

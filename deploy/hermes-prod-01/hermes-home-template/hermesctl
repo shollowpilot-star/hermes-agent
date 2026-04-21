@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# hermesctl — zero-trust ergonomic proxy to the hermes CLI
+# Runs as the hermes service user with correct HERMES_HOME.
+# Read-only admin convenience; does NOT weaken PATH isolation.
+# Audit: /var/log/auth.log captures each sudo invocation.
+set -euo pipefail
+exec sudo -u hermes -H env \
+  HERMES_HOME=/var/lib/hermes/.hermes \
+  PATH=/opt/hermes/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  /opt/hermes/venv/bin/hermes "$@"
