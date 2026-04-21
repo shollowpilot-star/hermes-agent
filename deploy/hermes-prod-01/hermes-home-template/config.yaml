@@ -1,0 +1,14 @@
+# hermes-prod-01 — headless systemd deploy
+# Minimum viable config. Runtime overrides via /etc/hermes/env (secrets) + systemd Environment= directives.
+# For full schema see hermes_cli/setup.py.
+# Generated: 2026-04-21 (Phase 7.5e)
+
+model:
+  default: anthropic/claude-opus-4.6
+
+terminal:
+  backend: local
+  lifetime_seconds: 300
+
+network:
+  force_ipv4: true
