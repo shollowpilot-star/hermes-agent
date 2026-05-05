@@ -1,5 +1,62 @@
 import { cellAtIndex, CellWidth, type Screen, setCellStyleId, type StylePool } from './screen.js'
 
+/** Per-row searchable text + index maps, returned by buildSearchRowText. */
+export type SearchRowText = {
+  /** Lowercased character data for the row.  Length may exceed colOf.length:
+   *  surrogate pairs (emoji) and multi-unit lowercase (Turkish İ → i + U+0307)
+   *  contribute >1 code unit per visible cell. */
+  text: string
+  /** colOf[cellIdx] = column index in the buffer for the cellIdx-th visible
+   *  cell on the row.  Length = number of non-skipped cells on the row. */
+  colOf: number[]
+  /** codeUnitToCell[i] = cellIdx (into colOf) for the i-th code unit of `text`.
+   *  Maps indexOf positions back to a cell index.  Length = text.length. */
+  codeUnitToCell: number[]
+}
+
+/** Build the lowercased row text + index maps used by both highlight and
+ *  scan paths.  Three skip conditions, all aligned with setCellStyleId /
+ *  extractRowText (selection.ts):
+ *    - SpacerTail: 2nd cell of a wide char, no char of its own
+ *    - SpacerHead: end-of-line padding when a wide char wraps
+ *    - noSelect: gutters (⎿, line numbers) — same exclusion as
+ *      applySelectionOverlay.  "Highlight what you see" still holds for
+ *      content; gutters aren't search targets.
+ *  Lowercasing per-char (not on the joined string at the end) means
+ *  codeUnitToCell maps positions in the LOWERCASED text — U+0130
+ *  (Turkish İ) lowercases to 2 code units, so lowering the joined
+ *  string would desync indexOf positions from the map. */
+export function buildSearchRowText(screen: Screen, row: number): SearchRowText {
+  const w = screen.width
+  const noSelect = screen.noSelect
+  const rowOff = row * w
+
+  let text = ''
+  const colOf: number[] = []
+  const codeUnitToCell: number[] = []
+
+  for (let col = 0; col < w; col++) {
+    const idx = rowOff + col
+    const cell = cellAtIndex(screen, idx)
+
+    if (cell.width === CellWidth.SpacerTail || cell.width === CellWidth.SpacerHead || noSelect[idx] === 1) {
+      continue
+    }
+
+    const lc = cell.char.toLowerCase()
+    const cellIdx = colOf.length
+
+    for (let i = 0; i < lc.length; i++) {
+      codeUnitToCell.push(cellIdx)
+    }
+
+    text += lc
+    colOf.push(col)
+  }
+
+  return { text, colOf, codeUnitToCell }
+}
+
 /**
  * Highlight all visible occurrences of `query` in the screen buffer by
  * inverting cell styles (SGR 7). Post-render, same damage-tracking machinery
@@ -26,47 +83,13 @@ export function applySearchHighlight(screen: Screen, query: string, stylePool: S
   const lq = query.toLowerCase()
   const qlen = lq.length
   const w = screen.width
-  const noSelect = screen.noSelect
   const height = screen.height
 
   let applied = false
 
   for (let row = 0; row < height; row++) {
     const rowOff = row * w
-    // Build row text (already lowercased) + code-unit→cell-index map.
-    // Three skip conditions, all aligned with setCellStyleId /
-    // extractRowText (selection.ts):
-    //   - SpacerTail: 2nd cell of a wide char, no char of its own
-    //   - SpacerHead: end-of-line padding when a wide char wraps
-    //   - noSelect: gutters (⎿, line numbers) — same exclusion as
-    //     applySelectionOverlay. "Highlight what you see" still holds for
-    //     content; gutters aren't search targets.
-    // Lowercasing per-char (not on the joined string at the end) means
-    // codeUnitToCell maps positions in the LOWERCASED text — U+0130
-    // (Turkish İ) lowercases to 2 code units, so lowering the joined
-    // string would desync indexOf positions from the map.
-    let text = ''
-    const colOf: number[] = []
-    const codeUnitToCell: number[] = []
-
-    for (let col = 0; col < w; col++) {
-      const idx = rowOff + col
-      const cell = cellAtIndex(screen, idx)
-
-      if (cell.width === CellWidth.SpacerTail || cell.width === CellWidth.SpacerHead || noSelect[idx] === 1) {
-        continue
-      }
-
-      const lc = cell.char.toLowerCase()
-      const cellIdx = colOf.length
-
-      for (let i = 0; i < lc.length; i++) {
-        codeUnitToCell.push(cellIdx)
-      }
-
-      text += lc
-      colOf.push(col)
-    }
+    const { text, colOf, codeUnitToCell } = buildSearchRowText(screen, row)
 
     let pos = text.indexOf(lq)
 
